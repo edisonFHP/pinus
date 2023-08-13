@@ -224,9 +224,21 @@ export class MQTTAcceptor extends EventEmitter implements IAcceptor {
     }
 
     doSend(socket: any, msg: {[key: string]: any}) {
+        // let jMsg = /** 核心代码  */
+        var cache: any = [];
+        var jMsg = JSON.stringify(msg, function(key, value) {
+            if (typeof value === 'object' && value !== null) {
+                if (cache.indexOf(value) !== -1) {
+                    return;
+                }
+                cache.push(value);
+            }
+            return value;
+        });
+        cache = null; // Enable garbage collection
         socket.publish({
             topic: 'rpc',
-            payload: JSON.stringify(msg)
+            payload: jMsg //JSON.stringify(msg)
         });
     }
 
