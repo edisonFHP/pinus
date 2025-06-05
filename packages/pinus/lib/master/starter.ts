@@ -106,7 +106,7 @@ export function run(app: Application, server: ServerInfo, cb ?: (err?: string | 
  * @param {String} host server host
  * @return {Void}
  */
-export function bindCpu(sid: string, pid: string, host: string) {
+export function bindCpu(app: Application, sid: string, pid: string, host: string) {
     if (os.platform() === Constants.PLATFORM.LINUX && cpus[sid] !== undefined) {
         if (utils.isLocal(host)) {
             let options: string[] = [];
@@ -127,7 +127,7 @@ export function bindCpu(sid: string, pid: string, host: string) {
  * @param {String} pids  array of server's pid
  * @param {String} serverIds array of serverId
  */
-export function kill(pids: string[], servers: ServerInfo[]) {
+export function kill(app: Application, pids: string[], servers: ServerInfo[]) {
     let cmd;
     for (let i = 0; i < servers.length; i++) {
         let server = servers[i];

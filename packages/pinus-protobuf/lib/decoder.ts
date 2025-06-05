@@ -48,7 +48,7 @@ export class Decoder {
             let tag = head.tag;
             let name = protos.__tags[tag];
 
-            switch (protos[name].option) {
+            switch (protos[name]?.option) {
                 case 'optional':
                 case 'required':
                     msg[name] = this.decodeProp(protos[name].type, protos);
@@ -112,9 +112,11 @@ export class Decoder {
     decodeProp(type: string, protos?: { [key: string]: any }) {
         switch (type) {
             case 'uInt32':
+            case 'uInt64':
                 return codec.decodeUInt32(this.getBytes());
             case 'int32':
             case 'sInt32':
+            case 'sInt64':
                 return codec.decodeSInt32(this.getBytes());
             case 'float':
                 let float = this.buffer.readFloatLE(this.offset);

@@ -1,5 +1,5 @@
 {
-  "lerna": "3.19.0",
+  "lerna": "8.1.8",
   "packages": [
     "packages/pinus",
     "packages/pinus-admin",
@@ -18,7 +18,6 @@
     "examples/websocket-chat-ts-run/*",
     "examples/robot-sample"
   ],
-  "version": "1.7.0",
-  "npmClient": "yarn",
-  "useWorkspaces": true
+  "version": "1.7.3",
+  "npmClient": "yarn"
 }

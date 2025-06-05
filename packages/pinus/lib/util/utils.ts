@@ -3,10 +3,10 @@ import * as util from 'util';
 import {exec} from 'child_process';
 import {getLogger} from 'pinus-logger';
 import * as Constants from './constants';
-import {pinus} from '../pinus';
 import {ServerInfo} from './constants';
 import {Application} from '../application';
 import * as path from 'path';
+import { pinus } from '../pinus';
 
 let logger = getLogger('pinus', path.basename(__filename));
 
@@ -202,16 +202,16 @@ export function ping(host: string, cb: (ret: boolean) => void) {
  * Check if server is exsit.
  *
  */
-export function checkPort(server: ServerInfo, cb: (result: string) => void) {
+export function checkPort(app: Application, server: ServerInfo, cb: (result: string) => void) {
     if (!server.port && !server.clientPort) {
         invokeCallback(cb, 'leisure');
         return;
     }
     let port = server.port || server.clientPort;
-    let host = server.host;
-    let generateCommand = function (host: string, port: number) {
+    const host = server.host;
+    const generateCommand = function (host: string, port: number) {
         let cmd;
-        let ssh_params = pinus.app.get(Constants.RESERVED.SSH_CONFIG_PARAMS);
+        let ssh_params = app.get(Constants.RESERVED.SSH_CONFIG_PARAMS);
         if (!!ssh_params && Array.isArray(ssh_params)) {
             ssh_params = ssh_params.join(' ');
         }
@@ -225,8 +225,8 @@ export function checkPort(server: ServerInfo, cb: (result: string) => void) {
         }
         return cmd;
     };
-    let cmd1 = generateCommand(host, port);
-    let child = exec(cmd1, function (err, stdout, stderr) {
+    const cmd1 = generateCommand(host, port);
+    exec(cmd1, function (err, stdout, stderr) {
         if (err) {
             logger.error('command %s execute with error: %j', cmd1, err.stack);
             invokeCallback(cb, 'error');
@@ -234,7 +234,7 @@ export function checkPort(server: ServerInfo, cb: (result: string) => void) {
             invokeCallback(cb, 'busy');
         } else {
             port = server.clientPort;
-            let cmd2 = generateCommand(host, port);
+            const cmd2 = generateCommand(host, port);
             exec(cmd2, function (err, stdout, stderr) {
                 if (err) {
                     logger.error('command %s execute with error: %j', cmd2, err.stack);
@@ -250,7 +250,7 @@ export function checkPort(server: ServerInfo, cb: (result: string) => void) {
 }
 
 export function isLocal(host: string) {
-    let app = pinus.app;
+    const app = pinus.app;
     if (!app) {
         return host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0' || inLocal(host);
     } else {
