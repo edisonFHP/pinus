@@ -48,4 +48,5 @@ export function createServer(opts: Gateway.RpcServerOpts) {
 // module.exports.WSAcceptor from ('./acceptors/ws-acceptor');
 // module.exports.TcpAcceptor from ('./acceptors/tcp-acceptor');
 export { create as MqttAcceptor } from './acceptors/mqtt-acceptor';
+export { create as NatsAcceptor } from './acceptors/nats-acceptor';
 

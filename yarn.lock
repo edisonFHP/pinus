@@ -6736,6 +6736,13 @@ nanomatch@^1.2.9:
     snapdragon "^0.8.1"
     to-regex "^3.0.1"
 
+nats@^2.28.2:
+  version "2.29.3"
+  resolved "https://registry.yarnpkg.com/nats/-/nats-2.29.3.tgz#86099c9bc193464d4f8cbb1d3504335bd2719ec6"
+  integrity sha512-tOQCRCwC74DgBTk4pWZ9V45sk4d7peoE2njVprMRCBXrhJ5q5cYM7i6W+Uvw2qUrcfOSnuisrX7bEx3b3Wx4QA==
+  dependencies:
+    nkeys.js "1.1.0"
+
 ncp@~2.0.0:
   version "2.0.0"
   resolved "https://registry.npmmirror.com/ncp/download/ncp-2.0.0.tgz"
@@ -6760,6 +6767,13 @@ next-tick@1, next-tick@^1.1.0:
   version "1.1.0"
   resolved "https://registry.npmmirror.com/next-tick/download/next-tick-1.1.0.tgz"
   integrity sha1-GDbuMK1W1n7ygbIr0Zn3CUSbNes=
+
+nkeys.js@1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/nkeys.js/-/nkeys.js-1.1.0.tgz#de83a9a13f396c5b6d7c412788f4b9f7f35d4c18"
+  integrity sha512-tB/a0shZL5UZWSwsoeyqfTszONTt4k2YS0tuQioMOD180+MbombYVgzDUYHlx+gejYK6rgf08n/2Df99WY0Sxg==
+  dependencies:
+    tweetnacl "1.0.3"
 
 no-case@^2.2.0:
   version "2.3.2"
@@ -9646,6 +9660,11 @@ tunnel-agent@^0.6.0:
   integrity sha1-J6XeoGs2sEoKmWZ3SykIaPD8QP0=
   dependencies:
     safe-buffer "^5.0.1"
+
+tweetnacl@1.0.3:
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/tweetnacl/-/tweetnacl-1.0.3.tgz#ac0af71680458d8a6378d0d0d050ab1407d35596"
+  integrity sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==
 
 tweetnacl@^0.14.3, tweetnacl@~0.14.0:
   version "0.14.5"

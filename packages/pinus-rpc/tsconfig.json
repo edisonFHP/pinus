@@ -21,7 +21,8 @@
     "outDir": "./dist", //重定向输出目录。
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "skipLibCheck": true
   },
   "include": [
     "./**/*.ts"

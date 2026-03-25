@@ -6,6 +6,8 @@ import { MailBox } from './mailboxes/mqtt-mailbox';
 // let Ws2Mailbox from ('./mailboxes/ws2-mailbox');
 // let WsMailbox from ('./mailboxes/ws-mailbox');
 import {create as tcpMailBoxCreate} from './mailboxes/tcp-mailbox';
+import {create as natsMailBoxCreate} from './mailboxes/nats-mailbox';
+export { NatsMailBoxOpts } from './mailboxes/nats-mailbox';
 import {EventEmitter} from 'events';
 import {Tracer} from '../util/tracer';
 
@@ -71,3 +73,4 @@ export function createMqttMailBox (serverInfo: {id: string, host: string, port: 
 }
 
 export const createTcpMailBox = tcpMailBoxCreate;
+export const createNatsMailBox = natsMailBoxCreate;

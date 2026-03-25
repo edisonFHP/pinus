@@ -1,6 +1,7 @@
 import {MQTTAcceptor} from './acceptors/mqtt-acceptor';
 import {Tracer} from '../util/tracer';
 import {TCPAcceptor} from './acceptors/tcp-acceptor';
+import {NatsAcceptor} from './acceptors/nats-acceptor';
 import {Logger} from 'pinus-logger';
 import {EventEmitter} from 'events';
 import {MsgPkg} from './dispatcher';
@@ -41,3 +42,9 @@ export function createDefaultAcceptor(opts: AcceptorOpts, cb: AcceptorCallback):
 export function createTcpAcceptor(opts: AcceptorOpts, cb: AcceptorCallback): IAcceptor {
     return new TCPAcceptor(opts, cb);
 }
+
+export function createNatsAcceptor(opts: AcceptorOpts, cb: AcceptorCallback): IAcceptor {
+    return new NatsAcceptor(opts as any, cb);
+}
+
+export { NatsAcceptorOpts } from './acceptors/nats-acceptor';
