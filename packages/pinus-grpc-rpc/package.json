@@ -1,0 +1,33 @@
+{
+    "name": "pinus-grpc-rpc",
+    "version": "1.0.0",
+    "description": "gRPC transport layer for pinus-rpc",
+    "main": "./dist/index",
+    "types": "./lib/index",
+    "files": [
+        "dist",
+        "lib"
+    ],
+    "scripts": {
+        "build": "tsc && node -e \"require('fs').mkdirSync('dist/lib/proto',{recursive:true});require('fs').copyFileSync('lib/proto/pinus_rpc.proto','dist/lib/proto/pinus_rpc.proto')\"",
+        "lint": "node_modules/.bin/tslint --format prose -c ../../tslint.json lib/**/*.ts",
+        "fix-lint": "node_modules/.bin/tslint --format prose -c ../../tslint.json lib/**/*.ts --fix",
+        "test": "yarn run build"
+    },
+    "dependencies": {
+        "@grpc/grpc-js": "^1.8.22",
+        "@grpc/proto-loader": "^0.7.10",
+        "pinus-logger": "^1.7.3",
+        "pinus-rpc": "^1.7.3"
+    },
+    "peerDependencies": {
+        "pinus": "^1.7.3"
+    },
+    "devDependencies": {
+        "@types/node": "^12.20.41",
+        "pinus": "^1.7.3",
+        "tslint": "6.1.3",
+        "typescript": "^4.3.5"
+    },
+    "license": "MIT"
+}

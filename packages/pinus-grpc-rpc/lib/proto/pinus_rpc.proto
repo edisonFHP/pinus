@@ -1,0 +1,26 @@
+syntax = "proto3";
+package pinus;
+
+// Unified RPC envelope — maps directly to MailBoxMessage + RpcMsg.
+// A single proto for all Pinus inter-server calls; never needs to change
+// as remote classes are added or removed.
+service PinusRpc {
+    rpc Invoke (InvokeRequest) returns (InvokeResponse);
+    rpc Notify  (InvokeRequest) returns (Empty);
+}
+
+message InvokeRequest {
+    string namespace   = 1;
+    string server_type = 2;
+    string service     = 3;
+    string method      = 4;
+    // JSON-encoded any[] — preserves full compatibility with existing args types
+    bytes  args_json   = 5;
+}
+
+message InvokeResponse {
+    bytes  result_json = 1;
+    string error       = 2;
+}
+
+message Empty {}

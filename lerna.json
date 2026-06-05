@@ -9,6 +9,7 @@
     "packages/pinus-protobuf",
     "packages/pinus-protocol",
     "packages/pinus-rpc",
+    "packages/pinus-grpc-rpc",
     "packages/pinus-scheduler",
     "tools/*",
     "plugins/*",
