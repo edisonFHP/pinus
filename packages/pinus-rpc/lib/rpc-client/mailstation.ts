@@ -297,7 +297,9 @@ export class MailStation extends EventEmitter {
                     if (err) {
                         errorHandler(tracer, self, err, serverId, msg, opts, false, cb);
                     }
-                    utils.applyCallback(cb, args);
+                    // utils.applyCallback(cb, args); //todo old
+                    const respArgs: any[] = Array.isArray(args) ? args : [args];
+                    utils.invokeCallback.apply(utils, [cb, null].concat(respArgs));
                 });
             } : null);
         };
