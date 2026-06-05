@@ -2,6 +2,7 @@ import { pinus } from 'pinus';
 import * as  routeUtil from './app/util/routeUtil';
 import { preload } from './preload';
 import { createRobotPlugin } from 'pinus-robot-plugin';
+import { GrpcRpcComponent } from 'pinus-grpc-rpc';
 
 /**
  *  替换全局Promise
@@ -46,6 +47,9 @@ app.configure('production|development', function () {
 
     // filter configures
     app.filter(new pinus.filters.timeout());
+
+    // use gRPC for inter-server RPC
+    app.load(GrpcRpcComponent);
 
     // 热更新 handler配置
     // app.set('serverConfig',{
