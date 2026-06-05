@@ -39,6 +39,8 @@ cd packages/pinus
 yarn run build       # runs tsc
 ```
 
+The `pinus-grpc-rpc` build also copies `lib/proto/pinus_rpc.proto` into `dist/lib/proto/` — this is done automatically by its `build` script.
+
 ## Architecture Overview
 
 Pinus is a distributed, multi-process game server framework for Node.js (TypeScript), inspired by Pomelo. It uses a **master/frontend/backend** server topology with inter-process RPC communication.
@@ -49,6 +51,7 @@ Pinus is a distributed, multi-process game server framework for Node.js (TypeScr
 |------|---------|
 | `packages/pinus` | Core framework |
 | `packages/pinus-rpc` | Inter-process RPC system |
+| `packages/pinus-grpc-rpc` | gRPC transport layer for pinus-rpc |
 | `packages/pinus-admin` | Admin monitoring interface |
 | `packages/pinus-logger` | Logging abstraction (wraps log4js) |
 | `packages/pinus-loader` | Module loader with reflection |
@@ -57,7 +60,9 @@ Pinus is a distributed, multi-process game server framework for Node.js (TypeScr
 | `packages/pinus-protocol` | Wire protocol definitions |
 | `packages/pinus-scheduler` | Task scheduling utilities |
 | `tools/pinus-cli` | CLI management tool |
-| `plugins/` | Optional plugins (gate, base) |
+| `plugins/base-gate` | Gate server plugin |
+| `plugins/base-plugin` | Base plugin utilities |
+| `plugins/pinus-robot-plugin` | Robot/load-testing plugin |
 | `examples/` | Working example apps |
 
 ### Core Concepts
@@ -73,15 +78,29 @@ Pinus is a distributed, multi-process game server framework for Node.js (TypeScr
 
 **RPC / Remote** — `packages/pinus-rpc` provides transparent TypeScript RPC between servers. User-defined RPC services are typed through a global `SysRpc` interface augmentation pattern. Built-in remotes (`msgRemote`, `channelRemote`, `sessionRemote`) handle core framework messaging.
 
+The RPC transport is pluggable via **acceptor** (server-side) and **mailbox** (client-side) factories. Built-in transports in `pinus-rpc`: TCP, WebSocket (ws/ws2), MQTT (mqtt/mqtt2), NATS. The `pinus-grpc-rpc` package provides a gRPC transport (see below).
+
 **Session Model** — `FrontendSession` tracks a live client connection on the frontend server. `BackendSession` is a serialized mirror passed to backend handlers. `SessionService` manages all sessions per server.
 
 **Channel** — Named groups of sessions used for broadcasting messages to multiple clients simultaneously.
 
-**Connector** — Pluggable transport layer. Built-in connectors: HybridConnector (custom binary), SioConnector (Socket.IO), UDPConnector, MQTTConnector.
+**Connector** — Pluggable transport layer for client connections. Built-in connectors: HybridConnector (custom binary), SioConnector (Socket.IO), UDPConnector, MQTTConnector.
 
 **Push Scheduler** — Controls when messages are flushed to clients. `DirectPushScheduler` sends immediately; `BufferPushScheduler` batches by interval.
 
 **Filters** — Middleware for handler pipeline (`before`/`after`) and RPC calls. Built-ins: `serial`, `timeout`, `toobusy`, `time`.
+
+### gRPC RPC Transport (`pinus-grpc-rpc`)
+
+`GrpcRpcComponent` replaces the default TCP mailboxes with gRPC for all inter-server RPC. It must be loaded **after** `__remote__` and `__proxy__`:
+
+```typescript
+app.load(pinus.components.remote);
+app.load(pinus.components.proxy);
+app.load(GrpcRpcComponent, { grpcPort: 4000 });
+```
+
+Each server needs a `grpcPort` — resolved in order: `opts.grpcPort` → `servers.json grpcPort` field → `port + 1000`. The component starts a gRPC server (acceptor) in `afterStartAll` reusing `__remote__`'s dispatcher, and patches `MailStation.mailboxFactory` in `afterStart` so all outbound RPC uses gRPC. Frontend-only servers (no `__remote__`) skip the gRPC server but still get the gRPC client.
 
 ### Request Flow
 

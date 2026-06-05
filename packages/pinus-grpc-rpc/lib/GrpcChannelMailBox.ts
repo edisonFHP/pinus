@@ -1,31 +1,12 @@
 import * as grpc from '@grpc/grpc-js';
-import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { getLogger } from 'pinus-logger';
 import { IMailBox, MailBoxMessage, MailBoxOpts, MailBoxTimeoutCallback } from 'pinus-rpc';
 import { Tracer } from 'pinus-rpc/lib/util/tracer';
+import { getPkgDef } from './proto-loader';
 
 const logger = getLogger('pinus-grpc-rpc', path.basename(__filename));
-
-const PROTO_PATH = path.resolve(__dirname, './proto/pinus_rpc.proto');
-
-const PKG_DEF_OPTS: protoLoader.Options = {
-    keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true,
-};
-
-// Cache the package definition — loaded once per process.
-let _pkgDef: protoLoader.PackageDefinition | null = null;
-function getPkgDef(): protoLoader.PackageDefinition {
-    if (!_pkgDef) {
-        _pkgDef = protoLoader.loadSync(PROTO_PATH, PKG_DEF_OPTS);
-    }
-    return _pkgDef;
-}
 
 export interface GrpcServerInfo {
     id: string;
@@ -62,6 +43,9 @@ export class GrpcChannelMailBox extends EventEmitter implements IMailBox {
         const deadlineMs = Date.now() + 5000;
         this.stub.waitForReady(deadlineMs, (err?: Error) => {
             if (err) {
+                // Close the channel so it stops retrying in the background.
+                this.stub.close();
+                this.stub = null;
                 logger.error('[GrpcMailBox] connect failed to %s: %s', addr, err.message);
                 cb(err);
                 return;

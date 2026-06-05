@@ -126,9 +126,10 @@ export class GrpcRpcComponent {
 
     stop(force: boolean, cb: () => void): void {
         if (this._grpcAcceptor) {
-            this._grpcAcceptor.close();
+            this._grpcAcceptor.close(cb);
             this._grpcAcceptor = null;
+        } else {
+            process.nextTick(cb);
         }
-        process.nextTick(cb);
     }
 }

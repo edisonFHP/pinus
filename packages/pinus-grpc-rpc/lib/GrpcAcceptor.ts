@@ -1,22 +1,14 @@
 import * as grpc from '@grpc/grpc-js';
-import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { getLogger } from 'pinus-logger';
 import { IAcceptor, AcceptorCallback, AcceptorOpts } from 'pinus-rpc';
 import { Tracer } from 'pinus-rpc/lib/util/tracer';
+import { getPkgDef } from './proto-loader';
 
 const logger = getLogger('pinus-grpc-rpc', path.basename(__filename));
 
-const PROTO_PATH = path.resolve(__dirname, './proto/pinus_rpc.proto');
-
-const PKG_DEF_OPTS: protoLoader.Options = {
-    keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true,
-};
+const SHUTDOWN_GRACE_MS = 5000;
 
 export interface GrpcAcceptorOpts extends AcceptorOpts {
     grpcPort?: number;
@@ -37,7 +29,6 @@ export class GrpcAcceptor extends EventEmitter implements IAcceptor {
 
     listen(port: number | string): void {
         if (this._started) { return; }
-        this._started = true;
 
         // Resolve gRPC port: explicit opt > servers.json grpcPort > fallback port+1000
         const grpcPort: number =
@@ -47,8 +38,7 @@ export class GrpcAcceptor extends EventEmitter implements IAcceptor {
                 : undefined)
             ?? (Number(port) + 1000);
 
-        const pkgDef = protoLoader.loadSync(PROTO_PATH, PKG_DEF_OPTS);
-        const proto = grpc.loadPackageDefinition(pkgDef) as any;
+        const proto = grpc.loadPackageDefinition(getPkgDef()) as any;
 
         this.server.addService(proto.pinus.PinusRpc.service, {
             Invoke: (
@@ -74,15 +64,29 @@ export class GrpcAcceptor extends EventEmitter implements IAcceptor {
                     this.emit('error', err, this);
                     return;
                 }
+                this._started = true;
                 this.server.start();
                 logger.info('[GrpcAcceptor] gRPC server listening on port %d', grpcPort);
             }
         );
     }
 
-    close(): void {
-        this.server.tryShutdown(() => {
+    close(cb?: () => void): void {
+        const done = () => {
             this.emit('closed');
+            cb?.();
+        };
+
+        // Fallback: force-shutdown if graceful drain takes too long.
+        const forceTimer = setTimeout(() => {
+            logger.warn('[GrpcAcceptor] tryShutdown timed out — forcing shutdown');
+            this.server.forceShutdown();
+            done();
+        }, SHUTDOWN_GRACE_MS);
+
+        this.server.tryShutdown(() => {
+            clearTimeout(forceTimer);
+            done();
         });
     }
 
