@@ -105,7 +105,8 @@ export class GrpcChannelMailBox extends EventEmitter implements IMailBox {
                     cb(tracer, new Error('[GrpcMailBox] failed to parse result_json'));
                     return;
                 }
-                cb(tracer, null as any, result);
+                // Match MQTT/TCP mailboxes: third arg is [returnValue], not returnValue
+                cb(tracer, null as any, [result]);
             }
         );
     }

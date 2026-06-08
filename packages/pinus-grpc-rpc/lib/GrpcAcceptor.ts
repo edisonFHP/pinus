@@ -65,7 +65,7 @@ export class GrpcAcceptor extends EventEmitter implements IAcceptor {
                     return;
                 }
                 this._started = true;
-                this.server.start();
+                // bindAsync starts the server since @grpc/grpc-js 1.10.x
                 logger.info('[GrpcAcceptor] gRPC server listening on port %d', grpcPort);
             }
         );
