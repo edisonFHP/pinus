@@ -1,4 +1,5 @@
 import { getLogger } from 'pinus-logger';
+import * as http from 'http';
 import * as utils from '../util/utils';
 import { default as events } from '../util/events';
 import * as Constants from '../util/constants';
@@ -6,15 +7,23 @@ import * as util from 'util';
 import { Application } from '../application';
 import { IModule, ConsoleService, MonitorAgent, MonitorCallback } from 'pinus-admin';
 import { ServerInfo } from '../util/constants';
+import { MasterInfo } from '../index';
+import { ActiveHealthMonitor } from '../util/activeHealthMonitor';
 import * as path from 'path';
 let logger = getLogger('pinus', path.basename(__filename));
 
-
+const MAX_DISCONNECT_BEFORE_FAILOVER = 3;
 
 export class MonitorWatcherModule implements IModule {
     app: Application;
     service: any;
     id: string;
+
+    private haCandidates: MasterInfo[] = [];
+    private currentMasterIndex: number = -1;
+    private switchLock: boolean = false;
+    private disconnectCount: number = 0;
+    private activeHealthMonitor: ActiveHealthMonitor | null = null;
 
     static moduleId = Constants.KEYWORDS.MONITOR_WATCHER;
 
@@ -24,6 +33,128 @@ export class MonitorWatcherModule implements IModule {
         this.id = this.app.getServerId();
 
         this.app.event.on(events.START_SERVER, finishStart.bind(null, this));
+
+        this.haCandidates = this.app.get('masterHACandidates') || [];
+        if (this.haCandidates.length > 0) {
+            this.service.on('disconnect', () => this.onMasterDisconnect());
+            this.service.on('reconnect', () => {
+                this.disconnectCount = 0;
+                this.switchLock = false;
+            });
+            this.startActiveMonitor(this.app.getMaster());
+        }
+    }
+
+    private startActiveMonitor(masterInfo: MasterInfo) {
+        if (this.activeHealthMonitor) {
+            this.activeHealthMonitor.stop();
+        }
+        this.activeHealthMonitor = new ActiveHealthMonitor(masterInfo);
+        this.activeHealthMonitor.on('masterDead', (dead: MasterInfo) => {
+            if (this.switchLock) return;
+            this.switchLock = true;
+            logger.warn('[HA] ActiveHealthMonitor declared master dead: %j', dead);
+            this.failoverToNext();
+        });
+        this.activeHealthMonitor.start();
+    }
+
+    private onMasterDisconnect() {
+        if (this.switchLock) return;
+        this.disconnectCount++;
+        logger.warn('[HA] Master disconnect detected (%d/%d)', this.disconnectCount, MAX_DISCONNECT_BEFORE_FAILOVER);
+        if (this.disconnectCount >= MAX_DISCONNECT_BEFORE_FAILOVER) {
+            this.switchLock = true;
+            this.failoverToNext();
+        }
+    }
+
+    private async connectToLeader(): Promise<MasterInfo | null> {
+        for (const candidate of this.haCandidates) {
+            try {
+                const leaderInfo = await this.fetchRaftLeader(candidate);
+                if (leaderInfo) return leaderInfo;
+            } catch {
+                // candidate unreachable, try next
+            }
+        }
+        return null;
+    }
+
+    private fetchRaftLeader(candidate: MasterInfo): Promise<MasterInfo | null> {
+        return new Promise((resolve) => {
+            const healthPort = candidate.port + 1;
+            const req = http.get(
+                { host: candidate.host, port: healthPort, path: '/raft/leader', timeout: 2000 },
+                (res) => {
+                    if (res.statusCode !== 200) { resolve(null); return; }
+                    let body = '';
+                    res.on('data', (chunk: string) => { body += chunk; });
+                    res.on('end', () => {
+                        try {
+                            const data = JSON.parse(body);
+                            if (data.leaderHost && data.leaderPort) {
+                                resolve({ id: data.leaderId || '', host: data.leaderHost, port: data.leaderPort });
+                            } else {
+                                resolve(null);
+                            }
+                        } catch { resolve(null); }
+                    });
+                }
+            );
+            req.on('error', () => resolve(null));
+            req.on('timeout', () => { req.destroy(); resolve(null); });
+        });
+    }
+
+    private async failoverToNext() {
+        if (this.haCandidates.length > 0) {
+            const leader = await this.connectToLeader();
+            if (leader) {
+                const currentMaster = this.app.getMaster();
+                this.disconnectCount = 0;
+                logger.warn('[HA] Raft failover: %j -> leader %j', currentMaster, leader);
+                const monitorComponent = this.app.components.__monitor__;
+                if (monitorComponent) {
+                    monitorComponent.reconnect(leader);
+                }
+                this.startActiveMonitor(leader);
+                return;
+            }
+        }
+        const currentMaster = this.app.getMaster();
+        let nextIndex = -1;
+        for (let i = 0; i < this.haCandidates.length; i++) {
+            const c = this.haCandidates[i];
+            if (c.host === currentMaster.host && c.port === currentMaster.port) continue;
+            if (i > this.currentMasterIndex) {
+                nextIndex = i;
+                break;
+            }
+        }
+        if (nextIndex === -1) {
+            // wrap around: pick first candidate that differs from current master
+            for (let i = 0; i < this.haCandidates.length; i++) {
+                const c = this.haCandidates[i];
+                if (!(c.host === currentMaster.host && c.port === currentMaster.port)) {
+                    nextIndex = i;
+                    break;
+                }
+            }
+        }
+        if (nextIndex === -1) {
+            logger.error('[HA] All master candidates exhausted, cannot failover.');
+            return;
+        }
+        const nextMaster = this.haCandidates[nextIndex];
+        this.currentMasterIndex = nextIndex;
+        this.disconnectCount = 0;
+        logger.warn('[HA] Master failover: %j -> %j', currentMaster, nextMaster);
+        const monitorComponent = this.app.components.__monitor__;
+        if (monitorComponent) {
+            monitorComponent.reconnect(nextMaster);
+        }
+        this.startActiveMonitor(nextMaster);
     }
 
     start(cb: () => void) {

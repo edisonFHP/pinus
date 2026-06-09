@@ -1,6 +1,7 @@
 import * as starter from './starter';
 import { getLogger } from 'pinus-logger';
 import * as path from 'path';
+import * as http from 'http';
 
 let logger = getLogger('pinus', path.basename(__filename));
 let crashLogger = getLogger('crash-log', path.basename(__filename));
@@ -13,7 +14,67 @@ import * as Constants from '../util/constants';
 import { Application } from '../application';
 import { ConsoleService, ConsoleServiceOpts } from 'pinus-admin';
 import { IModule } from '../index';
+import { MasterWatcherModule } from '../modules/masterwatcher';
+import { Watchdog } from './watchdog';
+import { RaftNode, RaftPeer } from '../util/raftNode';
 
+
+interface RaftLeaderInfo {
+    leaderId: string;
+    leaderHost: string;
+    leaderPort: number;
+    term: number;
+}
+
+export class MasterHealthServer {
+    private server: http.Server | null = null;
+
+    constructor(
+        private readonly getWatchdog: () => Watchdog | null,
+        private readonly getLeaderInfo: () => RaftLeaderInfo | null = () => null
+    ) {}
+
+    start(port: number) {
+        this.server = http.createServer((req, res) => {
+            if (req.method === 'GET' && req.url === '/health') {
+                const watchdog = this.getWatchdog();
+                const servers = watchdog ? watchdog.query() : {};
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    status: 'ok',
+                    uptime: process.uptime(),
+                    serverCount: Object.keys(servers).length,
+                    timestamp: Date.now()
+                }));
+            } else if (req.method === 'GET' && req.url === '/raft/leader') {
+                const leaderInfo = this.getLeaderInfo();
+                if (!leaderInfo) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'no leader elected' }));
+                } else {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(leaderInfo));
+                }
+            } else {
+                res.writeHead(404);
+                res.end();
+            }
+        });
+        this.server.listen(port, () => {
+            logger.info('[HA] Master health endpoint listening on port %d', port);
+        });
+        this.server.on('error', (err) => {
+            logger.warn('[HA] Master health server error: %s', err.message);
+        });
+    }
+
+    stop() {
+        if (this.server) {
+            this.server.close();
+            this.server = null;
+        }
+    }
+}
 
 export type MasterServerOptions =
     {
@@ -29,6 +90,9 @@ export class MasterServer {
     modules: IModule[] = [];
     closeWatcher: boolean;
     masterConsole: ConsoleService;
+    healthServer: MasterHealthServer | null = null;
+    private raftNode: RaftNode | null = null;
+    private raftLeaderInfo: { leaderId: string; leaderHost: string; leaderPort: number; term: number } | null = null;
 
     constructor(app: Application, opts?: MasterServerOptions) {
         this.app = app;
@@ -56,6 +120,49 @@ export class MasterServer {
                 if (err) {
                     utils.invokeCallback(cb, err);
                     return;
+                }
+
+                const healthPort = self.masterInfo.port + 1;
+                self.healthServer = new MasterHealthServer(
+                    () => {
+                        const watcherMod = self.modules.find(m => m instanceof MasterWatcherModule) as MasterWatcherModule | undefined;
+                        return watcherMod ? watcherMod.watchdog : null;
+                    },
+                    () => self.raftLeaderInfo
+                );
+                self.healthServer.start(healthPort);
+
+                const haCandidates: { id?: string; host: string; port: number }[] = self.app.get('masterHACandidates') || [];
+                if (haCandidates.length > 0) {
+                    const nodeId = self.masterInfo.id || `master-${self.masterInfo.host}-${self.masterInfo.port}`;
+                    const peers: RaftPeer[] = haCandidates
+                        .filter(c => !(c.host === self.masterInfo.host && c.port === self.masterInfo.port))
+                        .map(c => ({
+                            id: c.id || `master-${c.host}-${c.port}`,
+                            host: c.host,
+                            port: c.port,
+                            raftPort: c.port + 2
+                        }));
+                    const allNodes = [...haCandidates.map(c => ({
+                        id: c.id || `master-${c.host}-${c.port}`,
+                        host: c.host,
+                        port: c.port
+                    })), { id: nodeId, host: self.masterInfo.host, port: self.masterInfo.port }];
+                    self.raftNode = new RaftNode(nodeId, peers, self.masterInfo.port + 2);
+                    self.raftNode.on('leaderElected', (leaderId: string) => {
+                        const found = allNodes.find(n => n.id === leaderId);
+                        self.raftLeaderInfo = {
+                            leaderId,
+                            leaderHost: found ? found.host : self.masterInfo.host,
+                            leaderPort: found ? found.port : self.masterInfo.port,
+                            term: self.raftNode!.currentTerm
+                        };
+                        logger.info('[Raft] Leader elected: %s (term %d)', leaderId, self.raftLeaderInfo.term);
+                    });
+                    self.raftNode.on('follower', () => {
+                        logger.info('[Raft] Node %s became follower (term %d)', nodeId, self.raftNode!.currentTerm);
+                    });
+                    self.raftNode.start();
                 }
 
                 if (self.app.get(Constants.RESERVED.MODE) !== Constants.RESERVED.STAND_ALONE) {
@@ -142,6 +249,14 @@ export class MasterServer {
     }
 
     stop(cb: () => void) {
+        if (this.raftNode) {
+            this.raftNode.stop();
+            this.raftNode = null;
+        }
+        if (this.healthServer) {
+            this.healthServer.stop();
+            this.healthServer = null;
+        }
         this.masterConsole.stop();
         process.nextTick(cb);
     }

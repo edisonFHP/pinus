@@ -178,10 +178,23 @@ let loadServers = function (app: Application) {
 
 /**
  * Load master info from config/master.json.
+ * Also loads masterha.json if present, enabling HA passive failover.
  */
 let loadMaster = function (app: Application) {
     app.loadConfigBaseApp(Constants.RESERVED.MASTER, Constants.FILEPATH.MASTER);
     app.master = app.get(Constants.RESERVED.MASTER);
+
+    const haConfigPath = path.join(app.getBase(), Constants.FILEPATH.MASTER_HA);
+    if (fs.existsSync(haConfigPath)) {
+        try {
+            const haConfig = JSON.parse(fs.readFileSync(haConfigPath, 'utf8'));
+            const candidates = haConfig.master || [];
+            app.set('masterHACandidates', candidates);
+            logger.info('[HA] Loaded %d master candidates from masterha.json', candidates.length);
+        } catch (err) {
+            logger.warn('[HA] Failed to parse masterha.json: %s', (err as Error).message);
+        }
+    }
 };
 
 export interface ServerStartArgs extends ServerInfo {
