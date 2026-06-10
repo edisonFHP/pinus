@@ -130,7 +130,7 @@ export class MonitorWatcherModule implements IModule {
                 logger.warn('[HA] Raft failover: %j -> leader %j', currentMaster, leader);
                 // Update app.master before reconnect so the new MonitorWatcherModule
                 // instance created by loadModules() picks up the correct master.
-                this.app.master = leader;
+                this.app.master = leader as any;
                 const monitorComponent = this.app.components.__monitor__;
                 if (monitorComponent) {
                     monitorComponent.reconnect(leader);
@@ -170,7 +170,7 @@ export class MonitorWatcherModule implements IModule {
         logger.warn('[HA] Master failover: %j -> %j', currentMaster, nextMaster);
         // Update app.master before reconnect so the new MonitorWatcherModule
         // instance created by loadModules() picks up the correct master.
-        this.app.master = nextMaster;
+        this.app.master = nextMaster as any;
         const monitorComponent = this.app.components.__monitor__;
         if (monitorComponent) {
             monitorComponent.reconnect(nextMaster);
