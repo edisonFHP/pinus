@@ -39,7 +39,9 @@ export class MonitorWatcherModule implements IModule {
             this.service.on('disconnect', () => this.onMasterDisconnect());
             this.service.on('reconnect', () => {
                 this.disconnectCount = 0;
-                this.switchLock = false;
+                // switchLock is managed by failoverToNext, not reset here.
+                // The old MQTT client fires reconnect events to the dead master
+                // which would otherwise incorrectly reset the lock mid-failover.
             });
             this.startActiveMonitor(this.app.getMaster());
         }
@@ -48,15 +50,19 @@ export class MonitorWatcherModule implements IModule {
     private startActiveMonitor(masterInfo: MasterInfo) {
         if (this.activeHealthMonitor) {
             this.activeHealthMonitor.stop();
+            this.activeHealthMonitor = null;
         }
-        this.activeHealthMonitor = new ActiveHealthMonitor(masterInfo);
-        this.activeHealthMonitor.on('masterDead', (dead: MasterInfo) => {
+        const monitor = new ActiveHealthMonitor(masterInfo);
+        this.activeHealthMonitor = monitor;
+        monitor.on('masterDead', (dead: MasterInfo) => {
             if (this.switchLock) return;
+            // Stale guard: ignore events from a monitor that was already replaced.
+            if (this.activeHealthMonitor !== monitor) return;
             this.switchLock = true;
             logger.warn('[HA] ActiveHealthMonitor declared master dead: %j', dead);
             this.failoverToNext();
         });
-        this.activeHealthMonitor.start();
+        monitor.start();
     }
 
     private onMasterDisconnect() {
@@ -108,17 +114,28 @@ export class MonitorWatcherModule implements IModule {
     }
 
     private async failoverToNext() {
+        // Stop the current monitor immediately before any async work.
+        // This prevents in-flight health-check requests from re-triggering
+        // masterDead and causing a concurrent second failover attempt.
+        if (this.activeHealthMonitor) {
+            this.activeHealthMonitor.stop();
+            this.activeHealthMonitor = null;
+        }
+
         if (this.haCandidates.length > 0) {
             const leader = await this.connectToLeader();
             if (leader) {
                 const currentMaster = this.app.getMaster();
                 this.disconnectCount = 0;
                 logger.warn('[HA] Raft failover: %j -> leader %j', currentMaster, leader);
+                // Update app.master before reconnect so the new MonitorWatcherModule
+                // instance created by loadModules() picks up the correct master.
+                this.app.master = leader;
                 const monitorComponent = this.app.components.__monitor__;
                 if (monitorComponent) {
                     monitorComponent.reconnect(leader);
                 }
-                this.startActiveMonitor(leader);
+                this.switchLock = false;
                 return;
             }
         }
@@ -144,17 +161,21 @@ export class MonitorWatcherModule implements IModule {
         }
         if (nextIndex === -1) {
             logger.error('[HA] All master candidates exhausted, cannot failover.');
+            this.switchLock = false;
             return;
         }
         const nextMaster = this.haCandidates[nextIndex];
         this.currentMasterIndex = nextIndex;
         this.disconnectCount = 0;
         logger.warn('[HA] Master failover: %j -> %j', currentMaster, nextMaster);
+        // Update app.master before reconnect so the new MonitorWatcherModule
+        // instance created by loadModules() picks up the correct master.
+        this.app.master = nextMaster;
         const monitorComponent = this.app.components.__monitor__;
         if (monitorComponent) {
             monitorComponent.reconnect(nextMaster);
         }
-        this.startActiveMonitor(nextMaster);
+        this.switchLock = false;
     }
 
     start(cb: () => void) {
