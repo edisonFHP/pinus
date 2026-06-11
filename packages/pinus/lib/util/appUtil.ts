@@ -188,7 +188,7 @@ let loadMaster = function (app: Application) {
     if (fs.existsSync(haConfigPath)) {
         try {
             const haConfig = JSON.parse(fs.readFileSync(haConfigPath, 'utf8'));
-            const candidates = haConfig.master || [];
+            const candidates = haConfig.masterha || haConfig.master || [];
             app.set('masterHACandidates', candidates);
             logger.info('[HA] Loaded %d master candidates from masterha.json', candidates.length);
         } catch (err) {
